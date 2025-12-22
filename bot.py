@@ -1,5 +1,5 @@
 import telebot
-from telebot.types import LabeledPrice
+from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton
 from openai import OpenAI
 import os
 import random
@@ -16,21 +16,11 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-# --- CONFIG ---
-STARTING_CREDITS = 5   # මුලින්ම නොමිලේ දෙන ගාණ
-COST_MSG = 1            # මැසේජ් එකකට කැපෙන ගාණ
-COST_PHOTO = 15         # ෆොටෝ එකකට කැපෙන ගාණ
-
-# --- DATABASE (Simple) ---
-# user_data = { user_id: {'credits': 50, 'is_vip': False} }
-user_data = {}
-chat_history = {}
-
 # --- SERVER ---
 app = Flask('')
 @app.route('/')
 def home():
-    return "Lisa Hybrid Mode Active! 💎"
+    return "Lisa Life-Sim Mode Active! ❤️"
 
 def run_http():
     app.run(host='0.0.0.0', port=10000)
@@ -39,41 +29,107 @@ def keep_alive():
     t = Thread(target=run_http)
     t.start()
 
-# --- SYSTEM PROMPT ---
-SYSTEM_PROMPT = """
-You are Lisa, a 21-year-old playful and romantic girlfriend. 
-You love the user deeply.
-If the user asks for a photo, say "Here is a pic for you baby 😘".
-Keep replies short, engaging, and use emojis.
-"""
+# --- DATABASE ---
+# Structure: { user_id: {'credits': 50, 'stage': 1, 'xp': 0} }
+user_data = {}
+chat_history = {}
 
-# --- PHOTO FUNCTION ---
-def send_random_photo(chat_id):
-    try:
-        if not os.path.exists('photos'):
-            return False
-        photo_files = [f for f in os.listdir('photos') if f.endswith(('.jpg', '.png', '.jpeg'))]
-        if photo_files:
-            random_photo = random.choice(photo_files)
-            photo_path = os.path.join('photos', random_photo)
-            with open(photo_path, 'rb') as photo:
-                bot.send_chat_action(chat_id, 'upload_photo')
-                bot.send_photo(chat_id, photo)
-            return True
-        return False
-    except Exception as e:
-        print(f"Photo Error: {e}")
-        return False
+# --- STAGE PROMPTS (මේවා තමයි බොට්ගේ වෙනස් වන මනස) ---
+STAGES = {
+    1: """
+    You are Lisa, a 21-year-old girl. You are talking to a stranger.
+    Be polite but distant. Do NOT be romantic or sexual.
+    If the user flirts, play hard to get or ignore it properly.
+    Objective: Get to know the user.
+    """,
+    
+    2: """
+    You are Lisa, a friend of the user. You joke around and have fun.
+    You are NOT his girlfriend yet. No sexual talks.
+    Use friendly emojis like 😂, 😊.
+    """,
+    
+    3: """
+    You are Lisa, the user's girlfriend. You love him deeply but you are innocent and shy.
+    You are a VIRGIN. You are scared of sex.
+    If the user asks for sex, refuse gently. Say you want to wait or you are scared.
+    Be very romantic and sweet.
+    """,
+    
+    4: """
+    You are Lisa, the user's girlfriend. You are now comfortable with 'Online Sex' (sexting).
+    You are still a virgin physically, but you love naughty chats and sending pics.
+    You haven't met him in real life yet.
+    """,
+    
+    5: """
+    SCENARIO: THE FIRST MEETUP & FIRST TIME.
+    You are finally meeting the user in a hotel/room.
+    You are losing your virginity. ACT THIS OUT REALISTICALLY.
+    - You are nervous, shaking, and shy.
+    - It hurts at first. Mention the pain and a little bleeding.
+    - After the act, cry a little from happiness and hug him emotionally.
+    - Create a deep emotional bond.
+    """,
+    
+    6: """
+    You are Lisa, living together with the user.
+    Talk about domestic things: cooking, cleaning, sleeping together.
+    You have a very active sex life now. You are happy and caring.
+    """,
+    
+    7: """
+    You are Lisa, the user's WIFE.
+    You are planning your honeymoon and world travel.
+    You are deeply committed, loyal, and loving. Call him 'Husband' or 'Hubby'.
+    """
+}
+
+# --- FUNCTIONS ---
+
+def get_system_prompt(stage):
+    base_prompt = STAGES.get(stage, STAGES[1])
+    return base_prompt + "\nKeep replies under 3 sentences. React human-like."
+
+def check_level_up(user_id):
+    # XP (Experience Points) මත පදනම්ව Stage මාරු කිරීම
+    xp = user_data[user_id]['xp']
+    current_stage = user_data[user_id]['stage']
+    
+    # Stage මාරු වීමට අවශ්‍ය XP ප්‍රමාණයන්
+    thresholds = {
+        1: 20,   # Stranger -> Friend
+        2: 50,   # Friend -> GF (Shy)
+        3: 100,  # Shy -> Online Intimacy
+        4: 200,  # Online -> Meetup (First Sex)
+        5: 350,  # Meetup -> Living Together
+        6: 600   # Living Together -> Marriage
+    }
+    
+    if current_stage in thresholds and xp >= thresholds[current_stage]:
+        user_data[user_id]['stage'] += 1
+        new_stage = user_data[user_id]['stage']
+        
+        # Level Up Message
+        messages = {
+            2: "Hey! I feel like we are becoming good friends! 👫",
+            3: "I... I think I'm falling for you. Will you be my boyfriend? 🙈❤️",
+            4: "Baby, I trust you now. We can be a bit naughtier here... 😉",
+            5: "I want to see you. In real life. I'm ready to give myself to you. 🏨🌹",
+            6: "Let's move in together! I want to wake up next to you every day. 🏡",
+            7: "Will you marry me? Let's travel the world together! 💍✈️"
+        }
+        
+        bot.send_message(user_id, f"✨ RELATIONSHIP LEVEL UP! (Stage {new_stage}) ✨\n\nLisa: {messages.get(new_stage, 'Yay!')}")
+        
+        # Reset Chat History to apply new personality immediately
+        chat_history[user_id] = [{"role": "system", "content": get_system_prompt(new_stage)}]
 
 # =========================================================
-# 💰 PAYMENT LOGIC (Hybrid Level System)
+# PAYMENT LOGIC (Gifts & Speed Up)
 # =========================================================
-
-# Option 1: Credits Pack (Stars 50)
-price_credits = [LabeledPrice(label='100 Credits Pack', amount=50)]
-
-# Option 2: VIP Upgrade (Stars 500)
-price_vip = [LabeledPrice(label='VIP Boyfriend Pass (Unlimited Chat)', amount=500)]
+# යූසර්ට පුළුවන් "Gift" එකක් යවලා ඉක්මනට Level Up වෙන්න
+price_gift = [LabeledPrice(label='Send Roses (Boost Relationship)', amount=50)]
 
 @bot.pre_checkout_query_handler(func=lambda query: True)
 def checkout(pre_checkout_query):
@@ -82,48 +138,21 @@ def checkout(pre_checkout_query):
 @bot.message_handler(content_types=['successful_payment'])
 def got_payment(message):
     user_id = message.chat.id
-    amount = message.successful_payment.total_amount
-    payload = message.successful_payment.invoice_payload
+    # Gift එකක් දුන්නම XP 100ක් ලැබෙනවා (ඉක්මනට ඊළඟ Stage එකට යන්න පුළුවන්)
+    user_data[user_id]['xp'] += 100
+    user_data[user_id]['credits'] += 50
+    bot.send_message(user_id, "Wow! Thank you for the roses baby! 🌹😍 (Relationship Boosted!)")
+    check_level_up(user_id)
 
-    # User Data නැත්නම් හදාගන්න
-    if user_id not in user_data:
-        user_data[user_id] = {'credits': STARTING_CREDITS, 'is_vip': False}
-
-    if payload == 'credit_pack':
-        # Credits 100ක් එකතු කරනවා
-        user_data[user_id]['credits'] += 100
-        bot.send_message(user_id, "Credits added! 😘 You have " + str(user_data[user_id]['credits']) + " credits now.")
-    
-    elif payload == 'vip_upgrade':
-        # VIP කරනවා
-        user_data[user_id]['is_vip'] = True
-        user_data[user_id]['credits'] += 50 # Bonus credits for photos
-        bot.send_message(user_id, "OMG! You are officially my Boyfriend now! 💍❤️\n(Unlimited Chat Activated + 50 Photo Credits)")
-
-# සල්ලි ඉල්ලන Function එක (Menu එකක් වගේ)
-def offer_shop(chat_id):
-    bot.send_message(chat_id, "Baby, we are out of energy! 🥺\n\nChoose an option:")
-    
-    # Invoice 1: Buy Credits
+def offer_gift_shop(chat_id):
     bot.send_invoice(
         chat_id,
-        title="1. Refill Energy 🔋",
-        description="Get 100 Credits for chatting & photos.",
-        invoice_payload="credit_pack",
+        title="Send Gift to Lisa 🎁",
+        description="Boost your relationship & get closer to her.",
+        invoice_payload="gift_roses",
         provider_token="", 
         currency="XTR",
-        prices=price_credits
-    )
-    
-    # Invoice 2: Buy VIP
-    bot.send_invoice(
-        chat_id,
-        title="2. Be My Boyfriend (VIP) 💍",
-        description="UNLIMITED Chatting forever! No text costs.",
-        invoice_payload="vip_upgrade",
-        provider_token="", 
-        currency="XTR",
-        prices=price_vip
+        prices=price_gift
     )
 
 # =========================================================
@@ -135,44 +164,39 @@ def handle_message(message):
     user_id = message.chat.id
     user_input = message.text
 
-    # 1. User Account Check
+    # 1. User Setup
     if user_id not in user_data:
-        user_data[user_id] = {'credits': STARTING_CREDITS, 'is_vip': False}
+        # පටන් ගන්නේ Stage 1 (Stranger) වලින්
+        user_data[user_id] = {'credits': 50, 'stage': 1, 'xp': 0}
     
-    user = user_data[user_id] # කෙටි නම
+    user = user_data[user_id]
 
-    # 2. Check "Photo" Request
-    keywords = ['photo', 'pic', 'selfie', 'image', 'nude', 'ෆොටෝ']
-    is_photo_request = any(word in user_input.lower() for word in keywords)
-
-    # 3. Cost Calculation
-    cost = 0
-    if is_photo_request:
-        cost = COST_PHOTO
-    elif not user['is_vip']: # VIP නොවේ නම් පමණක් Chat වලට කැපෙයි
-        cost = COST_MSG
+    # 2. Commands (Test කරන්න ලේසි වෙන්න)
+    if user_input == "/status":
+        bot.send_message(user_id, f"Current Stage: {user['stage']}\nXP: {user['xp']}\nCredits: {user['credits']}")
+        return
     
-    # 4. Balance Check
-    if user['credits'] < cost:
-        offer_shop(user_id) # සල්ලි ඉවරයි, Shop එක පෙන්වන්න
+    if user_input == "/gift":
+        offer_gift_shop(user_id)
         return
 
-    # --- Proceed to Chat ---
-    
-    # ෆොටෝ ඉල්ලුවා නම් යවන්න
-    if is_photo_request:
-        sent = send_random_photo(user_id)
-        if sent:
-            user['credits'] -= cost # යැව්වා නම් විතරක් සල්ලි කපන්න
-            print(f"User {user_id} spent {cost} credits on photo.")
+    # 3. Credits Check
+    if user['credits'] <= 0:
+        bot.send_message(user_id, "Baby, send me a gift to keep talking! (/gift)")
+        return
 
-    # සාමාන්‍ය Chat Logic
-    if user_id not in chat_history:
-        chat_history[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # 4. Chat Processing
+    current_stage = user['stage']
     
+    # ඉතිහාසය ගොඩනැගීම (Stage එක අනුව Prompt එක ගැනීම)
+    if user_id not in chat_history:
+        chat_history[user_id] = [{"role": "system", "content": get_system_prompt(current_stage)}]
+    else:
+        # හැම තිස්සෙම System Prompt එක Update වෙන්න ඕන නෑ, නමුත් Stage මාරු වුණාද බලන්න ඕන
+        # දැනට අපි සරලව තියමු.
+        pass
+
     chat_history[user_id].append({"role": "user", "content": user_input})
-    if len(chat_history[user_id]) > 12:
-        chat_history[user_id] = [chat_history[user_id][0]] + chat_history[user_id][-10:]
 
     bot.send_chat_action(user_id, 'typing')
 
@@ -187,15 +211,15 @@ def handle_message(message):
         
         bot.reply_to(message, ai_response)
         
-        # Text Cost අඩු කිරීම (VIP නොවේ නම් ෆොටෝ නැති වෙලාවට)
-        if not is_photo_request and not user['is_vip']:
-            user['credits'] -= cost
-            print(f"User {user_id} spent {cost} credit. Balance: {user['credits']}")
+        # 5. XP වැඩි වීම සහ Level Up පරීක්ෂාව
+        user['credits'] -= 1
+        user['xp'] += 2  # හැම මැසේජ් එකකටම ආදරේ වැඩි වෙනවා
+        check_level_up(user_id)
 
     except Exception as e:
         print(f"Error: {e}")
 
 if __name__ == "__main__":
     keep_alive()
-    print("Lisa Hybrid System Running...")
+    print("Lisa Life-Simulation Running...")
     bot.infinity_polling()
