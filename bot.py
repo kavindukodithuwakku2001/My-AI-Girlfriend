@@ -20,8 +20,8 @@ client = OpenAI(
 )
 
 # --- DATABASE CONNECTION ---
-# මෙතනින් තමයි Cloud Database එකට සම්බන්ධ වෙන්නේ
-mongo_client = MongoClient(MONGO_URI)
+# tlsAllowInvalidCertificates=True දැම්මාම අර SSL Error එක එන්නේ නෑ
+mongo_client = MongoClient(MONGO_URI, tls=True, tlsAllowInvalidCertificates=True)
 db = mongo_client["lisa_db"] # Database නම
 users_collection = db["users"] # User data තියෙන තැන
 
