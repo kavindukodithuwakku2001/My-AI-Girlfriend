@@ -2,3 +2,5 @@ pyTelegramBotAPI
 openai
 flask
 gunicorn
+pymongo
+dnspython
