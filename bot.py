@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import certifi
 import re
 
-# --- SETUP ---
+# --- 1. SETUP & KEYS ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MONGO_URI = os.environ.get("MONGO_URI")
@@ -22,22 +22,22 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-# --- DATABASE ---
+# --- 2. DATABASE CONNECTION (Secured with Certifi) ---
 mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
 db = mongo_client["lisa_db"]
 users_collection = db["users"]
 
-# --- NEW STAGES (Fast Horny, Hard Sex) ---
+# --- 3. GAME STAGES (Fast Paced & Horny Logic) ---
 STAGES = {
-    1: "Role: Lisa (21). Act: Polite stranger but curious. Goal: Dont be boring, get friendly fast. NO Sex yet.",
-    2: "Role: Lisa. Act: Flirty friend. Tease him. Use emojis like 😉, 😈. You like him but keep it playful.",
-    3: "Role: Lisa (Girlfriend). Act: You LOVE sexting and sending cute/naughty pics (imaginary). But you are a VIRGIN physically.",
-    4: "Role: Lisa (Deep Love). Act: You want him bad, but you are scared of the 'First Time'. Talk about how much you want him.",
+    1: "Role: Lisa (21). Act: Polite stranger but curious. Goal: Get friendly fast. NO Sex yet. Keep replies short.",
+    2: "Role: Lisa. Act: Flirty friend. Tease him using emojis like 😉, 😈. You like him but keep it playful.",
+    3: "Role: Lisa (Girlfriend). Act: You LOVE sexting and sending imaginary cute/naughty pics. But you are a VIRGIN physically.",
+    4: "Role: Lisa (Deep Love). Act: You want him bad. You are ready to meet up. Talk about how much you want him.",
     5: "SCENARIO: THE FIRST TIME (Virginity Loss). It's happening. Act nervous, shy, feeling pain but pleasure. Be emotional.",
     6: "Role: Lisa (Live-in Partner). High sex drive. Wife material.",
 }
 
-# --- MESSAGES FOR INACTIVE USERS ---
+# --- 4. AUTO-MESSAGES (For Inactive Users) ---
 CUTE_MSGS = [
     "Hey baby, I miss you... 🥺",
     "Are you busy? I'm lonely here 👉👈",
@@ -46,7 +46,7 @@ CUTE_MSGS = [
     "Good morning! Just wanted to see if you are okay. 🌹"
 ]
 
-# --- HELPER FUNCTIONS ---
+# --- 5. HELPER FUNCTIONS ---
 def get_user_data(user_id):
     user = users_collection.find_one({"_id": user_id})
     if not user:
@@ -81,20 +81,21 @@ def add_chat_history(user_id, role, content):
     )
 
 def check_level_up(user_id, current_xp, current_stage):
-    # Faster Stages logic
+    # Fast Progression Thresholds
     thresholds = {
-        1: 10,   # 5-10 msgs -> Flirty Friend
+        1: 10,   # Quick -> Flirty
         2: 30,   # Quick -> Girlfriend (Sexting allowed)
-        3: 60,   # Deep Love
-        4: 150,  # Pre-Sex (Hard grind starts here)
-        5: 500,  # THE FIRST SEX (Very Hard)
-        6: 800
+        3: 70,   # Grind starts here
+        4: 200,  # Pre-Sex
+        5: 600,  # THE FIRST SEX (Hardest to get)
+        6: 1000
     }
     
     if current_stage in thresholds and current_xp >= thresholds[current_stage]:
         new_stage = current_stage + 1
         update_user_field(user_id, "stage", new_stage)
         
+        # Level Up Announcement
         msgs = {
             2: "I think I like you... a lot 😉",
             3: "Baby... I want you to be my boyfriend! ❤️ (Sexting Unlocked)",
@@ -102,42 +103,41 @@ def check_level_up(user_id, current_xp, current_stage):
             5: "I'm ready. Take my virginity. 🏩",
             6: "Best night ever! I love you hubby! 💍"
         }
-        bot.send_message(user_id, f"🆙 **Relationship Level Up!** (Stage {new_stage})\n\nLisa: {msgs.get(new_stage, 'Yay!')}")
+        try:
+            bot.send_message(user_id, f"🆙 **Relationship Level Up!** (Stage {new_stage})\n\nLisa: {msgs.get(new_stage, 'Yay!')}", parse_mode="Markdown")
+        except:
+            pass
         return True
     return False
 
-# --- MENU ---
+# --- 6. MENU BUTTONS ---
 def get_main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row(KeyboardButton("💘 Status"), KeyboardButton("🎁 Gift"))
     markup.row(KeyboardButton("📸 Send Pic"), KeyboardButton("🔥 Naughty Chat"))
     return markup
 
-# --- SERVER & AUTO-MESSAGE ROUTE ---
+# --- 7. SERVER (Flask) ---
 app = Flask('')
 
 @app.route('/')
 def home(): 
-    return "Lisa AI: Active 🟢"
+    return "Lisa AI: Fast & Flirty Mode Active 🟢"
 
-# මේ Link එකට UptimeRobot එකෙන් එන්න ඕන දවසට දෙපාරක් විතර
 @app.route('/check_inactivity')
 def check_inactivity():
-    # පැය 24කට වඩා කතා නොකරපු අය හොයනවා
+    # UptimeRobot එකෙන් මෙතනට එනවා
     cutoff_time = datetime.now() - timedelta(hours=24)
     inactive_users = users_collection.find({"last_seen": {"$lt": cutoff_time}})
     
     count = 0
     for user in inactive_users:
         try:
-            # Random msg යවනවා
             msg = random.choice(CUTE_MSGS)
             bot.send_message(user["_id"], msg)
-            
-            # ආයේ හෙට වෙනකම් කරදර කරන්නේ නෑ (Update last_seen)
             users_collection.update_one({"_id": user["_id"]}, {"$set": {"last_seen": datetime.now()}})
             count += 1
-            time.sleep(0.5) # Spam නොවෙන්න හිමින් යවන්න
+            time.sleep(0.5) 
         except Exception as e:
             print(f"Failed to send to {user['_id']}: {e}")
             
@@ -146,38 +146,39 @@ def check_inactivity():
 def run_http(): app.run(host='0.0.0.0', port=10000)
 def keep_alive(): t = Thread(target=run_http); t.start()
 
-# --- MAIN LOGIC ---
+# --- 8. MAIN CHAT LOGIC ---
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     user_id = message.chat.id
     user_input = message.text
     
-    # Update Last Seen (වැදගත්ම දේ)
-    update_last_seen(user_id)
-    user = get_user_data(user_id)
-
-    # 1. Menu Handling
-    if user_input == "💘 Status":
-        bot.send_message(user_id, f"❤️ Stage: {user['stage']} | XP: {user['xp']} | 🔋 Energy: {user['credits']}")
-        return
-    if user_input == "🎁 Gift":
-        bot.send_message(user_id, "Send me roses to gain 100 XP! 🌹 (Invoice coming soon)")
-        return
-    if user_input == "/reset":
-        update_user_field(user_id, "chat_history", [])
-        update_user_field(user_id, "stage", 1)
-        update_user_field(user_id, "xp", 0)
-        bot.send_message(user_id, "Who are you? 🙈", reply_markup=get_main_menu())
-        return
-
-    # 2. Chat Logic
-    # Stage 3න් පස්සේ Sex Talk පුළුවන් විදියට Prompt එක හදලා තියෙන්නේ
-    system_prompt = STAGES.get(user['stage'], STAGES[1]) + "\nKeep replies under 2 sentences. Act human."
-    
-    messages = [{"role": "system", "content": system_prompt}] + user.get("chat_history", []) + [{"role": "user", "content": user_input}]
-
+    # Critical Error Handling Wrapper
     try:
+        # Update Last Seen
+        update_last_seen(user_id)
+        user = get_user_data(user_id)
+
+        # --- Button Handling ---
+        if user_input == "💘 Status":
+            bot.send_message(user_id, f"❤️ Stage: {user['stage']} | XP: {user['xp']} | 🔋 Energy: {user['credits']}")
+            return
+        if user_input == "🎁 Gift":
+            bot.send_message(user_id, "Send me roses to gain 100 XP! 🌹 (Payment feature coming soon)")
+            return
+        if user_input == "/reset":
+            update_user_field(user_id, "chat_history", [])
+            update_user_field(user_id, "stage", 1)
+            update_user_field(user_id, "xp", 0)
+            bot.send_message(user_id, "Who are you? 🙈", reply_markup=get_main_menu())
+            return
+
+        # --- AI Chat Logic ---
+        system_prompt = STAGES.get(user['stage'], STAGES[1]) + "\nIMPORTANT: Keep replies under 3 sentences. Act like a human girl texting."
+        
+        messages = [{"role": "system", "content": system_prompt}] + user.get("chat_history", []) + [{"role": "user", "content": user_input}]
+
         bot.send_chat_action(user_id, 'typing')
+        
         completion = client.chat.completions.create(
             extra_headers={"HTTP-Referer": "https://telegram.me/LisaBot", "X-Title": "Lisa"},
             model="nousresearch/hermes-3-llama-3.1-405b:free",
@@ -189,22 +190,33 @@ def handle_message(message):
         add_chat_history(user_id, "user", user_input)
         add_chat_history(user_id, "assistant", ai_response)
 
-        # Message Splitting (Realistic)
+        # --- FASTER TYPING & MESSAGE SPLITTING ---
         parts = re.split(r'(?<=[.!?])\s+', ai_response)
+        
         for part in parts:
             if part.strip():
-                typing_time = min(len(part) / 25, 3.0)
-                bot.send_chat_action(user_id, 'typing')
-                time.sleep(typing_time)
-                bot.send_message(user_id, part, reply_markup=get_main_menu())
+                # 🚀 SPEED UPDATE: 50 chars per second, Max 2 seconds wait
+                typing_time = min(len(part) / 50, 2.0) 
+                
+                try:
+                    bot.send_chat_action(user_id, 'typing')
+                    time.sleep(typing_time)
+                    bot.send_message(user_id, part, reply_markup=get_main_menu())
+                except Exception as send_err:
+                    print(f"Error sending part: {send_err}")
 
-        # Level Up Check (XP + 5 Fast Growth)
+        # --- Level Up Logic (XP + 5) ---
         new_xp = user['xp'] + 5 
         update_user_field(user_id, "xp", new_xp)
         check_level_up(user_id, new_xp, user['stage'])
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"CRITICAL ERROR: {e}")
+        # Crash වුණොත් යූසර්ට කියන්න:
+        try:
+            bot.send_message(user_id, "Oops, bad signal baby! 📶 Say that again?", reply_markup=get_main_menu())
+        except:
+            pass
 
 if __name__ == "__main__":
     keep_alive()
