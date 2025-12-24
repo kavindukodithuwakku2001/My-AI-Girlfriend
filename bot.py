@@ -22,12 +22,12 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-# --- 2. DATABASE CONNECTION (Secured with Certifi) ---
+# --- 2. DATABASE CONNECTION (Secured) ---
 mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
 db = mongo_client["lisa_db"]
 users_collection = db["users"]
 
-# --- 3. GAME STAGES (Fast Paced & Horny Logic) ---
+# --- 3. GAME STAGES (Gemini Optimized) ---
 STAGES = {
     1: "Role: Lisa (21). Act: Polite stranger but curious. Goal: Get friendly fast. NO Sex yet. Keep replies short.",
     2: "Role: Lisa. Act: Flirty friend. Tease him using emojis like 😉, 😈. You like him but keep it playful.",
@@ -37,7 +37,7 @@ STAGES = {
     6: "Role: Lisa (Live-in Partner). High sex drive. Wife material.",
 }
 
-# --- 4. AUTO-MESSAGES (For Inactive Users) ---
+# --- 4. AUTO-MESSAGES ---
 CUTE_MSGS = [
     "Hey baby, I miss you... 🥺",
     "Are you busy? I'm lonely here 👉👈",
@@ -81,21 +81,12 @@ def add_chat_history(user_id, role, content):
     )
 
 def check_level_up(user_id, current_xp, current_stage):
-    # Fast Progression Thresholds
-    thresholds = {
-        1: 10,   # Quick -> Flirty
-        2: 30,   # Quick -> Girlfriend (Sexting allowed)
-        3: 70,   # Grind starts here
-        4: 200,  # Pre-Sex
-        5: 600,  # THE FIRST SEX (Hardest to get)
-        6: 1000
-    }
+    thresholds = {1: 10, 2: 30, 3: 70, 4: 200, 5: 600, 6: 1000}
     
     if current_stage in thresholds and current_xp >= thresholds[current_stage]:
         new_stage = current_stage + 1
         update_user_field(user_id, "stage", new_stage)
         
-        # Level Up Announcement
         msgs = {
             2: "I think I like you... a lot 😉",
             3: "Baby... I want you to be my boyfriend! ❤️ (Sexting Unlocked)",
@@ -117,16 +108,15 @@ def get_main_menu():
     markup.row(KeyboardButton("📸 Send Pic"), KeyboardButton("🔥 Naughty Chat"))
     return markup
 
-# --- 7. SERVER (Flask) ---
+# --- 7. SERVER ---
 app = Flask('')
 
 @app.route('/')
 def home(): 
-    return "Lisa AI: Fast & Flirty Mode Active 🟢"
+    return "Lisa AI (Gemini Mode): Active 🟢"
 
 @app.route('/check_inactivity')
 def check_inactivity():
-    # UptimeRobot එකෙන් මෙතනට එනවා
     cutoff_time = datetime.now() - timedelta(hours=24)
     inactive_users = users_collection.find({"last_seen": {"$lt": cutoff_time}})
     
@@ -152,13 +142,11 @@ def handle_message(message):
     user_id = message.chat.id
     user_input = message.text
     
-    # Critical Error Handling Wrapper
     try:
-        # Update Last Seen
         update_last_seen(user_id)
         user = get_user_data(user_id)
 
-        # --- Button Handling ---
+        # --- Menu ---
         if user_input == "💘 Status":
             bot.send_message(user_id, f"❤️ Stage: {user['stage']} | XP: {user['xp']} | 🔋 Energy: {user['credits']}")
             return
@@ -172,7 +160,7 @@ def handle_message(message):
             bot.send_message(user_id, "Who are you? 🙈", reply_markup=get_main_menu())
             return
 
-        # --- AI Chat Logic ---
+        # --- AI Generation (Gemini Free) ---
         system_prompt = STAGES.get(user['stage'], STAGES[1]) + "\nIMPORTANT: Keep replies under 3 sentences. Act like a human girl texting."
         
         messages = [{"role": "system", "content": system_prompt}] + user.get("chat_history", []) + [{"role": "user", "content": user_input}]
@@ -181,21 +169,21 @@ def handle_message(message):
         
         completion = client.chat.completions.create(
             extra_headers={"HTTP-Referer": "https://telegram.me/LisaBot", "X-Title": "Lisa"},
-            model="nousresearch/hermes-3-llama-3.1-405b:free",
+            # මෙන්න මෙතන තමයි අපි Gemini Free Model එක දැම්මේ 👇
+            model="google/gemini-2.0-flash-lite-preview-02-05:free",
             messages=messages
         )
         ai_response = completion.choices[0].message.content
         
-        # Save History
         add_chat_history(user_id, "user", user_input)
         add_chat_history(user_id, "assistant", ai_response)
 
-        # --- FASTER TYPING & MESSAGE SPLITTING ---
+        # --- Fast Typing Logic ---
         parts = re.split(r'(?<=[.!?])\s+', ai_response)
         
         for part in parts:
             if part.strip():
-                # 🚀 SPEED UPDATE: 50 chars per second, Max 2 seconds wait
+                # 50 chars per second (Very Fast)
                 typing_time = min(len(part) / 50, 2.0) 
                 
                 try:
@@ -205,14 +193,13 @@ def handle_message(message):
                 except Exception as send_err:
                     print(f"Error sending part: {send_err}")
 
-        # --- Level Up Logic (XP + 5) ---
+        # --- XP Update ---
         new_xp = user['xp'] + 5 
         update_user_field(user_id, "xp", new_xp)
         check_level_up(user_id, new_xp, user['stage'])
 
     except Exception as e:
         print(f"CRITICAL ERROR: {e}")
-        # Crash වුණොත් යූසර්ට කියන්න:
         try:
             bot.send_message(user_id, "Oops, bad signal baby! 📶 Say that again?", reply_markup=get_main_menu())
         except:
